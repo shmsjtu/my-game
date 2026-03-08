@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>π节：极小包围圆挑战</title>
+    <style>
+        body { text-align: center; font-family: sans-serif; background: #f4f4f9; margin: 0; padding-top: 10px;}
+        /* touch-action: none 阻止移动端默认的滑动和双击缩放行为 */
+        canvas { background: white; border: 2px solid #333; cursor: crosshair; touch-action: none; max-width: 95vw; box-shadow: 0 4px 8px rgba(0,0,0,0.1);}
+        #info { margin: 10px; font-size: 16px; font-weight: bold; color: #333; height: 40px;}
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #314159; color: white; border: none; border-radius: 5px;}
+    </style>
+</head>
+<body>
+
+    <h3 style="margin:5px">寻找最小包围圆 (SEC)</h3>
+    <div id="info">单指触控/拖拽，绘制一个包含所有多边形的最小圆</div>
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <br><br>
+    <button onclick="initGame()">生成新关卡</button>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const info = document.getElementById('info');
+
+    let polygons = [];
+    let allVertices = [];
+    let isDrawing = false;
+    let userCenter = null;
+    let userRadius = 0;
+    let optimalCircle = null;
+
+    // --- 数学计算模块 (Welzl算法) ---
+
+    // 计算两点距离
+    function dist(p1, p2) {
+        return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    }
+
+    // 判断点是否在圆内 (引入极小浮点误差容限)
+    function isInside(p, c) {
+        return dist(p, c) <= c.r + 1e-7;
+    }
+
+    // 两点定圆
+    function circleFrom2(A, B) {
+        return {
+            x: (A.x + B.x) / 2,
+            y: (A.y + B.y) / 2,
+            r: dist(A, B) / 2
+        };
+    }
+
+    // 三点定圆 (行列式推导外接圆)
+    function circleFrom3(A, B, C) {
+        const ax = A.x, ay = A.y, bx = B.x, by = B.y, cx = C.x, cy = C.y;
+        const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+        if (Math.abs(d) < 1e-7) return circleFrom2(A, B); // 极度共线情况退化
+
+        const aSq = ax*ax + ay*ay;
+        const bSq = bx*bx + by*by;
+        const cSq = cx*cx + cy*cy;
+
+        const ux = (aSq * (by - cy) + bSq * (cy - ay) + cSq * (ay - by)) / d;
+        const uy = (aSq * (cx - bx) + bSq * (ax - cx) + cSq * (bx - ax)) / d;
+
+        const center = { x: ux, y: uy };
+        return { x: ux, y: uy, r: dist(center, A) };
+    }
+
+    // 严谨的平凡解判断
+    function trivialCircle(R) {
+        if (R.length === 0) return { x: 0, y: 0, r: 0 };
+        if (R.length === 1) return { x: R[0].x, y: R[0].y, r: 0 };
+        if (R.length === 2) return circleFrom2(R[0], R[1]);
+        return circleFrom3(R[0], R[1], R[2]);
+    }
+
+    // 递归主体
+    function welzlHelper(P, R, n) {
+        if (n === 0 || R.length === 3) {
+            return trivialCircle(R);
+        }
+
+        const p = P[n - 1];
+        const c = welzlHelper(P, R, n - 1);
+
+        if (isInside(p, c)) {
+            return c;
+        }
+
+        R.push(p);
+        const nextC = welzlHelper(P, R, n - 1);
+        R.pop();
+        return nextC;
+    }
+
+    // 洗牌算法包装，保证期望 O(N)
+    function getExactMEC(points) {
+        const P = [...points];
+        for (let i = P.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [P[i], P[j]] = [P[j], P[i]];
+        }
+        return welzlHelper(P, [], P.length);
+    }
+
+    // --- 游戏逻辑模块 ---
+
+    // 生成随机凸多边形
+    function generatePolygon(cx, cy, radius, sides) {
+        let pts = [];
+        let angleStep = (Math.PI * 2) / sides;
+        for(let i=0; i<sides; i++){
+            // 加入随机扰动使其不规则
+            let angle = i * angleStep + (Math.random() - 0.5) * angleStep * 0.5;
+            let r = radius * (0.5 + Math.random() * 0.5);
+            pts.push({ x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r });
+        }
+        return pts;
+    }
+
+    function initGame() {
+        polygons = [];
+        allVertices = [];
+        const numShapes = Math.floor(Math.random() * 3) + 3; // 3到5个几何体
+
+        for (let i = 0; i < numShapes; i++) {
+            const sides = Math.floor(Math.random() * 4) + 3; // 3到6边形
+            const cx = Math.random() * 260 + 70;
+            const cy = Math.random() * 260 + 70;
+            const radius = Math.random() * 30 + 20;
+            const poly = generatePolygon(cx, cy, radius, sides);
+            polygons.push(poly);
+            allVertices.push(...poly); // 收集所有顶点用于计算
+        }
+
+        // 调用 Welzl 算法计算理论最优解
+        optimalCircle = getExactMEC(allVertices);
+
+        userCenter = null;
+        userRadius = 0;
+        info.innerText = "单指触控并拖拽，绘制最小包围圆";
+        info.style.color = "#333";
+        draw();
+    }
+
+    // --- 交互处理 (兼容鼠标与触摸) ---
+    
+    function getPointerPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    function startInteraction(e) {
+        e.preventDefault();
+        userCenter = getPointerPos(e);
+        userRadius = 0;
+        isDrawing = true;
+    }
+
+    function moveInteraction(e) {
+        if (!isDrawing) return;
+        e.preventDefault();
+        const pos = getPointerPos(e);
+        userRadius = dist(userCenter, pos);
+        draw();
+    }
+
+    function endInteraction(e) {
+        if (!isDrawing) return;
+        e.preventDefault();
+        isDrawing = false;
+        checkResult();
+    }
+
+    // 绑定事件
+    canvas.addEventListener('mousedown', startInteraction);
+    canvas.addEventListener('mousemove', moveInteraction);
+    canvas.addEventListener('mouseup', endInteraction);
+    
+    canvas.addEventListener('touchstart', startInteraction, {passive: false});
+    canvas.addEventListener('touchmove', moveInteraction, {passive: false});
+    canvas.addEventListener('touchend', endInteraction, {passive: false});
+
+    // --- 渲染与判定模块 ---
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 绘制多边形
+        polygons.forEach((poly, idx) => {
+            ctx.beginPath();
+            ctx.moveTo(poly[0].x, poly[0].y);
+            for(let i=1; i<poly.length; i++){
+                ctx.lineTo(poly[i].x, poly[i].y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = `hsl(${idx * 50 + 10}, 70%, 60%)`;
+            ctx.fill();
+            ctx.strokeStyle = "#333";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        });
+
+        // 绘制玩家圆
+        if (userCenter) {
+            ctx.beginPath();
+            ctx.arc(userCenter.x, userCenter.y, userRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(49, 65, 89, 0.2)";
+            ctx.fill();
+            ctx.strokeStyle = "#314159";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    }
+
+    function checkResult() {
+        let allInside = true;
+        allVertices.forEach(p => {
+            // 考虑触控操作的像素级误差，给予 2px 容差
+            if (dist(p, userCenter) > userRadius + 2) {
+                allInside = false;
+            }
+        });
+
+        if (!allInside) {
+            info.innerText = "挑战失败：有几何体顶点漏在圆外！";
+            info.style.color = "#e74c3c";
+            return;
+        }
+
+        // 定量评估：计算面积膨胀率
+        const optimalArea = Math.PI * optimalCircle.r * optimalCircle.r;
+        const userArea = Math.PI * userRadius * userRadius;
+        
+        // 面积误差越小，得分越高。误差超过100%得0分
+        let score = 100 * (1 - (userArea - optimalArea) / optimalArea);
+        score = Math.max(0, Math.min(100, score));
+
+        info.innerText = `成功！误差: ${((userArea/optimalArea - 1)*100).toFixed(1)}% | 得分: ${score.toFixed(1)}`;
+        info.style.color = "#27ae60";
+
+        // 绘制理论绝对最优解（绿色虚线）进行复盘比对
+        ctx.beginPath();
+        ctx.arc(optimalCircle.x, optimalCircle.y, optimalCircle.r, 0, Math.PI * 2);
+        ctx.strokeStyle = "#27ae60";
+        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    initGame();
+</script>
+</body>
+</html>
