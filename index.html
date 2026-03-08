@@ -152,19 +152,15 @@
     function getPointerPos(e) {
         const rect = canvas.getBoundingClientRect();
         
-        // 1. 提取视口坐标 (兼容鼠标与多点触控)
-        let clientX = e.clientX;
-        let clientY = e.clientY;
-        if (e.touches && e.touches.length > 0) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
-        }
-
-        // 2. 计算缩放因子 (内在分辨率 / CSS渲染分辨率)
+        // 计算 CSS 渲染尺寸与内部逻辑尺寸的缩放比
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
-
-        // 3. 应用仿射变换，将视口坐标映射到 Canvas 内部坐标系
+        
+        // 区分触屏与鼠标事件
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        // 映射到 Canvas 内部坐标系
         return { 
             x: (clientX - rect.left) * scaleX, 
             y: (clientY - rect.top) * scaleY 
@@ -274,3 +270,4 @@
 </script>
 </body>
 </html>
+
