@@ -99,16 +99,22 @@
         allVertices = [];
         gameState = 'PLAYING';
         
-        let numShapes = 2 + currentLevel; // 关卡1->3个，关卡5->7个
-        let spread = 100 + currentLevel * 20; // 分布范围随关卡扩大
+        let numShapes = 2 + currentLevel; // 仅保留数量随关卡增加
+        
+        // 边界约束常数
+        const canvasSize = 400;
+        const maxRadius = 50; 
+        const safeArea = canvasSize - 2 * maxRadius; // 生成域边长为 300
         
         for (let i = 0; i < numShapes; i++) {
             const sides = Math.floor(Math.random() * 4) + 3;
-            // 关卡越高，越倾向于向画布边缘生成图形
-            const cx = 200 + (Math.random() * 2 - 1) * spread;
-            const cy = 200 + (Math.random() * 2 - 1) * spread;
-            // 关卡3以上引入尺寸扰动
-            const radius = currentLevel >= 3 ? Math.random() * 40 + 10 : 30; 
+            
+            // 半径约束：限制在 [20, 50] 之间
+            const radius = currentLevel >= 3 ? Math.random() * 30 + 20 : 30; 
+            
+            // 中心点在安全域内服从二维均匀分布
+            const cx = maxRadius + Math.random() * safeArea;
+            const cy = maxRadius + Math.random() * safeArea;
             
             const poly = generatePolygon(cx, cy, radius, sides);
             polygons.push(poly);
