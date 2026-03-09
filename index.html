@@ -225,29 +225,25 @@
             return;
         }
 
-        // 挑战成功，锁定状态并计分
         gameState = 'DONE';
         const optimalArea = Math.PI * optimalCircle.r * optimalCircle.r;
         const userArea = Math.PI * userRadius * userRadius;
         
-        let score = 100 * (1 - (userArea - optimalArea) / optimalArea);
-        score = Math.max(0, Math.min(100, score)); // 限制在0-100分之间
+        // 计算原始面积误差比例
+        let rawErrorRatio = (userArea - optimalArea) / optimalArea;
+        
+        // 【修正点】如果由于 2px 容差导致玩家面积小于最优解，强制将误差抹平为 0
+        if (rawErrorRatio < 0) rawErrorRatio = 0; 
+
+        // 计算得分：误差为 0 时满分 100
+        let score = 100 * (1 - rawErrorRatio);
+        score = Math.max(0, Math.min(100, score)); 
         
         totalScore += score;
         scoreText.innerText = `总分: ${totalScore.toFixed(0)}`;
         
-        info.innerText = `✅ 本关得分: ${score.toFixed(1)} / 100\n(面积误差: ${((userArea/optimalArea - 1)*100).toFixed(1)}%)`;
+        info.innerText = `✅ 本关得分: ${score.toFixed(1)} / 100\n(面积误差: ${(rawErrorRatio * 100).toFixed(1)}%)`;
         info.style.color = "#27ae60";
-        
-        draw(); // 触发重绘，显示绿色虚线最优解
-
-        actionBtn.disabled = false;
-        if (currentLevel < 5) {
-            actionBtn.innerText = "进入下一关";
-        } else {
-            actionBtn.innerText = "查看最终成绩";
-            gameState = 'FINISHED';
-        }
     }
 
     function nextAction() {
@@ -272,3 +268,4 @@
 </script>
 </body>
 </html>
+
