@@ -244,6 +244,16 @@
         
         info.innerText = `✅ 本关得分: ${score.toFixed(1)} / 100\n(面积误差: ${(rawErrorRatio * 100).toFixed(1)}%)`;
         info.style.color = "#27ae60";
+
+        draw(); // 触发重绘，显示绿色虚线最优解
+
+        actionBtn.disabled = false;
+        if (currentLevel < 5) {
+            actionBtn.innerText = "进入下一关";
+        } else {
+            actionBtn.innerText = "查看最终成绩";
+            gameState = 'FINISHED';
+        }
     }
 
     function nextAction() {
@@ -268,4 +278,5 @@
 </script>
 </body>
 </html>
+
 
