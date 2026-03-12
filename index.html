@@ -216,47 +216,37 @@
     function checkResult() {
         let allInside = true;
         allVertices.forEach(p => {
-            // 2px 的触控容差保持不变
             if (dist(p, userCenter) > userRadius + 2) allInside = false;
         });
 
-        // 【修改核心】：无论成功与否，一旦画完松手，立刻锁定当前关卡状态
-        gameState = 'DONE';
-
         if (!allInside) {
-            // 失败分支：得分为0，给出惩罚提示
-            info.innerText = "❌ 未完全包围图形，本关得分为 0！";
+            info.innerText = "❌ 有几何体漏在圆外，请重新绘制！";
             info.style.color = "#e74c3c";
-            // 不增加 totalScore，直接重绘以显示绿色的标准答案供玩家复盘
-            draw();
-        } else {
-            // 成功分支：计算面积误差并给分
-            const optimalArea = Math.PI * optimalCircle.r * optimalCircle.r;
-            const userArea = Math.PI * userRadius * userRadius;
-            
-            // 计算误差比例并消除由 2px 容差带来的微小负数误差
-            let rawErrorRatio = (userArea - optimalArea) / optimalArea;
-            if (rawErrorRatio < 0) rawErrorRatio = 0; 
-            
-            let score = 100 * (1 - rawErrorRatio);
-            score = Math.max(0, Math.min(100, score)); 
-            
-            totalScore += score;
-            scoreText.innerText = `总分: ${totalScore.toFixed(0)}`;
-            
-            info.innerText = `✅ 本关得分: ${score.toFixed(1)} / 100\n(面积误差: ${(rawErrorRatio * 100).toFixed(1)}%)`;
-            info.style.color = "#27ae60";
-            
-            draw(); 
+            return;
         }
 
-        // 无论成功失败，都解锁底部按钮，引导进入后续流程
+        // 挑战成功，锁定状态并计分
+        gameState = 'DONE';
+        const optimalArea = Math.PI * optimalCircle.r * optimalCircle.r;
+        const userArea = Math.PI * userRadius * userRadius;
+        
+        let score = 100 * (1 - (userArea - optimalArea) / optimalArea);
+        score = Math.max(0, Math.min(100, score)); // 限制在0-100分之间
+        
+        totalScore += score;
+        scoreText.innerText = `总分: ${totalScore.toFixed(0)}`;
+        
+        info.innerText = `✅ 本关得分: ${score.toFixed(1)} / 100\n(面积误差: ${((userArea/optimalArea - 1)*100).toFixed(1)}%)`;
+        info.style.color = "#27ae60";
+        
+        draw(); // 触发重绘，显示绿色虚线最优解
+
         actionBtn.disabled = false;
         if (currentLevel < 5) {
             actionBtn.innerText = "进入下一关";
         } else {
             actionBtn.innerText = "查看最终成绩";
-            gameState = 'FINISHED'; // 标记整个游戏结束
+            gameState = 'FINISHED';
         }
     }
 
@@ -282,6 +272,7 @@
 </script>
 </body>
 </html>
+
 
 
 
