@@ -7,7 +7,7 @@
     <style>
         body { text-align: center; font-family: sans-serif; background: #f4f4f9; margin: 0; padding-top: 10px;}
         canvas { background: white; border: 2px solid #333; cursor: crosshair; touch-action: none; max-width: 95vw; box-shadow: 0 4px 8px rgba(0,0,0,0.1);}
-        #header { display: flex; justify-content: space-between; max-width: 95vw; margin: 0 auto 5px; font-weight: bold; color: #314159;}
+        #header { display: flex; justify-content: space-between; max-width: 95vw; margin: 0 auto 5px; font-size: 14px; font-weight: bold; color: #314159;}
         #info { margin: 10px auto; font-size: 15px; font-weight: bold; color: #333; height: 40px; width: 95vw; word-wrap: break-word;}
         button { padding: 12px 24px; font-size: 18px; font-weight: bold; cursor: pointer; background: #314159; color: white; border: none; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);}
         button:disabled { background: #95a5a6; cursor: not-allowed; box-shadow: none;}
@@ -18,6 +18,7 @@
     <h3 style="margin:5px 0">最小包围圆挑战</h3>
     <div id="header">
         <span id="levelText">关卡: 1 / 5</span>
+        <span id="attemptsText" style="color: #e67e22;">剩余机会: 3</span>
         <span id="scoreText">总分: 0</span>
     </div>
     <div id="info">单指拖拽绘制圆。完全包围所有图形即可得分。</div>
@@ -30,12 +31,14 @@
     const ctx = canvas.getContext('2d');
     const info = document.getElementById('info');
     const levelText = document.getElementById('levelText');
+    const attemptsText = document.getElementById('attemptsText');
     const scoreText = document.getElementById('scoreText');
     const actionBtn = document.getElementById('actionBtn');
 
     let currentLevel = 1;
     let totalScore = 0;
-    let gameState = 'PLAYING'; // PLAYING, DONE, FINISHED
+    let attemptsLeft = 3; // 新增：单关剩余机会
+    let gameState = 'PLAYING'; 
 
     let polygons = [];
     let allVertices = [];
@@ -93,29 +96,22 @@
         return pts;
     }
 
-    // 根据关卡控制参数难度
     function initLevel() {
         polygons = [];
         allVertices = [];
         gameState = 'PLAYING';
+        attemptsLeft = 3; // 重置机会
         
-        let numShapes = 2 + currentLevel; // 仅保留数量随关卡增加
-        
-        // 边界约束常数
+        let numShapes = 2 + currentLevel; 
         const canvasSize = 400;
         const maxRadius = 50; 
-        const safeArea = canvasSize - 2 * maxRadius; // 生成域边长为 300
+        const safeArea = canvasSize - 2 * maxRadius; 
         
         for (let i = 0; i < numShapes; i++) {
             const sides = Math.floor(Math.random() * 4) + 3;
-            
-            // 半径约束：限制在 [20, 50] 之间
             const radius = currentLevel >= 3 ? Math.random() * 30 + 20 : 30; 
-            
-            // 中心点在安全域内服从二维均匀分布
             const cx = maxRadius + Math.random() * safeArea;
             const cy = maxRadius + Math.random() * safeArea;
-            
             const poly = generatePolygon(cx, cy, radius, sides);
             polygons.push(poly);
             allVertices.push(...poly);
@@ -126,14 +122,14 @@
         userRadius = 0;
         
         levelText.innerText = `关卡: ${currentLevel} / 5`;
-        info.innerText = "拖拽绘制。圆必须包住所有图形边界。";
+        attemptsText.innerText = `剩余机会: ${attemptsLeft}`;
+        info.innerText = "拖拽绘制。圆必须完全包住所有图形。";
         info.style.color = "#333";
         actionBtn.innerText = "请先完成本关";
         actionBtn.disabled = true;
         draw();
     }
 
-    // --- 交互处理 (修复了触控偏移映射) ---
     function getPointerPos(e) {
         const rect = canvas.getBoundingClientRect();
         const scaleX = canvas.width / rect.width;
@@ -149,6 +145,11 @@
         userCenter = getPointerPos(e);
         userRadius = 0;
         isDrawing = true;
+        // 开始新绘制时，将提示文字重置为中性
+        if(attemptsLeft > 0) {
+            info.innerText = `绘制中... (剩余机会: ${attemptsLeft})`;
+            info.style.color = "#333";
+        }
     }
 
     function moveInteraction(e) {
@@ -177,7 +178,6 @@
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // 绘制多边形
         polygons.forEach((poly, idx) => {
             ctx.beginPath();
             ctx.moveTo(poly[0].x, poly[0].y);
@@ -190,7 +190,6 @@
             ctx.stroke();
         });
 
-        // 绘制玩家圆
         if (userCenter) {
             ctx.beginPath();
             ctx.arc(userCenter.x, userCenter.y, userRadius, 0, Math.PI * 2);
@@ -201,7 +200,6 @@
             ctx.stroke();
         }
 
-        // 关卡结算时绘制理论最优圆
         if(gameState === 'DONE' && optimalCircle) {
             ctx.beginPath();
             ctx.arc(optimalCircle.x, optimalCircle.y, optimalCircle.r, 0, Math.PI * 2);
@@ -220,33 +218,52 @@
         });
 
         if (!allInside) {
-            info.innerText = "❌ 有几何体漏在圆外，请重新绘制！";
-            info.style.color = "#e74c3c";
-            return;
+            attemptsLeft--;
+            attemptsText.innerText = `剩余机会: ${attemptsLeft}`;
+            
+            if (attemptsLeft > 0) {
+                // 还有机会，允许重绘，状态不变
+                info.innerText = `❌ 未完全包围图形，请重新绘制！(还剩 ${attemptsLeft} 次)`;
+                info.style.color = "#e74c3c";
+                draw();
+                return; 
+            } else {
+                // 机会用尽，锁定关卡得分为0
+                gameState = 'DONE';
+                info.innerText = "❌ 3次机会已用尽，本关得分为 0！";
+                info.style.color = "#e74c3c";
+                draw(); // 重绘显示最优解
+            }
+        } else {
+            // 成功包裹，锁定关卡并计算得分
+            gameState = 'DONE';
+            const optimalArea = Math.PI * optimalCircle.r * optimalCircle.r;
+            const userArea = Math.PI * userRadius * userRadius;
+            
+            let rawErrorRatio = (userArea - optimalArea) / optimalArea;
+            if (rawErrorRatio < 0) rawErrorRatio = 0; 
+            
+            let score = 100 * (1 - rawErrorRatio);
+            score = Math.max(0, Math.min(100, score)); 
+            
+            totalScore += score;
+            scoreText.innerText = `总分: ${totalScore.toFixed(0)}`;
+            
+            info.innerText = `✅ 挑战成功！得分: ${score.toFixed(1)} / 100\n(面积误差: ${(rawErrorRatio * 100).toFixed(1)}%)`;
+            info.style.color = "#27ae60";
+            
+            draw(); 
         }
 
-        // 挑战成功，锁定状态并计分
-        gameState = 'DONE';
-        const optimalArea = Math.PI * optimalCircle.r * optimalCircle.r;
-        const userArea = Math.PI * userRadius * userRadius;
-        
-        let score = 100 * (1 - (userArea - optimalArea) / optimalArea);
-        score = Math.max(0, Math.min(100, score)); // 限制在0-100分之间
-        
-        totalScore += score;
-        scoreText.innerText = `总分: ${totalScore.toFixed(0)}`;
-        
-        info.innerText = `✅ 本关得分: ${score.toFixed(1)} / 100\n(面积误差: ${((userArea/optimalArea - 1)*100).toFixed(1)}%)`;
-        info.style.color = "#27ae60";
-        
-        draw(); // 触发重绘，显示绿色虚线最优解
-
-        actionBtn.disabled = false;
-        if (currentLevel < 5) {
-            actionBtn.innerText = "进入下一关";
-        } else {
-            actionBtn.innerText = "查看最终成绩";
-            gameState = 'FINISHED';
+        // 仅在当前关卡锁定(DONE)时解锁下一关按钮
+        if (gameState === 'DONE') {
+            actionBtn.disabled = false;
+            if (currentLevel < 5) {
+                actionBtn.innerText = "进入下一关";
+            } else {
+                actionBtn.innerText = "查看最终成绩";
+                gameState = 'FINISHED';
+            }
         }
     }
 
@@ -258,6 +275,7 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             info.innerText = `🎉 挑战结束！\n您的总成绩为: ${totalScore.toFixed(1)} / 500`;
             info.style.color = "#314159";
+            attemptsText.innerText = "";
             actionBtn.innerText = "重新开始挑战";
             gameState = 'RESTART';
         } else if (gameState === 'RESTART') {
